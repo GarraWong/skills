@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Freya prototype</title>
+
+    <!--
+      Load order matters: MUI's UMD build reads window.React and window.ReactDOM
+      at evaluation time, so both must already be defined. Emotion is bundled
+      inside mui.js — do not add a separate emotion script.
+    -->
+    <script src="assets/react.js"></script>
+    <script src="assets/react-dom.js"></script>
+    <script src="assets/mui.js"></script>
+    <script src="assets/freya-theme.js"></script>
+    <script src="assets/babel.js"></script>
+
+    <style>
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <!--
+      type="text/babel" hands this block to Babel rather than the browser, which
+      is what makes the JSX below work without a build step. Babel compiles it on
+      load, so a syntax error surfaces in the console, not as a blank page.
+    -->
+    <script type="text/babel" data-presets="react">
+      const {
+        createTheme,
+        ThemeProvider,
+        CssBaseline,
+        Box,
+        Button,
+        Stack,
+        Typography,
+        Paper,
+      } = MaterialUI;
+
+      /**
+       * The real Freya theme, from the published package — not a copy.
+       *
+       * cssBaselineFontFix carries the eight @font-face blocks as inlined data
+       * URIs plus the rule that overrides freyads' unscoped `*` font-family. It
+       * is passed as a component override because CssBaseline is what emits it.
+       */
+      const theme = createTheme(FreyaTheme.freyaThemeOptions, {
+        components: {
+          MuiCssBaseline: FreyaTheme.cssBaselineFontFix,
+        },
+      });
+
+      function App() {
+        return (
+          <Box sx={{ p: 3 }}>
+            <Typography variant="h1">Freya prototype</Typography>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              Replace this with the screen you are prototyping.
+            </Typography>
+
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Stack direction="row" spacing={1}>
+                <Button variant="contained">Primary</Button>
+                <Button variant="contained" color="secondary">
+                  Default
+                </Button>
+              </Stack>
+            </Paper>
+          </Box>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <App />
+        </ThemeProvider>,
+      );
+    </script>
+  </body>
+</html>

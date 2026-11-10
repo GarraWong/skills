@@ -1,9 +1,33 @@
 ---
 name: review-spec-impl
-description: Read-only end-of-feature review of implementation code against a functional-spec change document (BR-xxx / INV-xxx) and its OpenSpec changes, producing a classified findings report (Missing / Conflict / Partial / Extra / Drift / Test gap / Unverifiable). Use when the user asks for 实现一致性审查, Spec 与实现 review, spec-vs-implementation review, or a final Spec↔代码 check of a feature before release or baselining. Not for maintaining FS↔OpenSpec coverage ledgers (use func-spec-coverage) or checking OpenSpec task completion (use openspec-verify-change).
-argument-hint: <slug> [increment] [<repo>=<base>..<head> ...]
+description: >-
+  Read-only end-of-feature review of implementation code against a functional-spec
+  change document (BR-xxx / INV-xxx) and its OpenSpec changes, producing a classified
+  findings report (Missing / Conflict / Partial / Extra / Drift / Test gap / Unverifiable).
+  Use when the user asks for 实现一致性审查, Spec 与实现 review, spec-vs-implementation
+  review, or a final Spec↔代码 check of a feature before release or baselining.
+  Not for maintaining FS↔OpenSpec coverage ledgers (use func-spec-coverage) or checking
+  OpenSpec task completion (use openspec-verify-change).
+argument-hint: "<slug> [increment] [<repo>=<base>..<head> ...]"
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git diff:*), Bash(git merge-base:*), Bash(git show:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(ls:*), Bash(grep:*), Bash(head:*), Bash(cat:*)
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - "Bash(git status:*)"
+  - "Bash(git log:*)"
+  - "Bash(git diff:*)"
+  - "Bash(git merge-base:*)"
+  - "Bash(git show:*)"
+  - "Bash(git grep:*)"
+  - "Bash(git ls-tree:*)"
+  - "Bash(git branch:*)"
+  - "Bash(git rev-parse:*)"
+  - "Bash(git symbolic-ref:*)"
+  - "Bash(ls:*)"
+  - "Bash(grep:*)"
+  - "Bash(head:*)"
+  - "Bash(cat:*)"
 ---
 
 # Spec ↔ 实现一致性审查（只读）
@@ -20,27 +44,32 @@ allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git diff:*), Bash(git mer
 
 按顺序解析。任何一项有歧义就停下来问用户，**不要猜**。
 
-1. **Functional Spec**：读 `functional-spec/changes/<slug>.md`。
-   - 文件不存在时，再查 `functional-spec/changes/archive/*-<slug>.md`。找到后说明该 change 已归档：审查对象改为已基线化的主题章节规则，并请用户确认。两处都没有就停止。
-2. **增量与规则清单**：读 `### Delivery manifest`。
+1. **Functional Spec 与审查口径**：读 `functional-spec/changes/<slug>.md`；不存在时查 `functional-spec/changes/archive/*-<slug>.md`，两处都没有就停止。
+   - 默认审查当前实现。change 已归档时，用归档文档恢复原增量和规则 ID，再按 `functional-spec/appendix/business-rules-index.md` 定位这些 ID 当前所在的主题章节、版本及撤回状态；不要把归档旧文当作现行规则。
+   - 用户明确要求回顾历史交付时，使用对应时点的规范与代码版本。口径、规则去向或版本无法确定时，只确认受影响部分；不要混用历史与当前口径。
+2. **增量与规则清单**：从原 change 文档读 `### Delivery manifest`。
    - manifest 只有一行，就用这一行。
    - 有多行且用户未指定时，列出每行的增量名和规则区间，询问用户审查哪一行（或全部）。
    - 把区间展开为逐条 ID，例如 `BR-ID-026–038` 展开为 13 条。`withdrawn` 的规则放进单独的「已撤回」清单，**不计入覆盖范围**，只用于第 5 步找 X。
-3. **OpenSpec change**：在 `openspec/changes/*/proposal.md`（不含 `archive/`）中 grep slug，按增量匹配 change（名称后缀、proposal 中的 Feature 号或规则 ID）。也检查 `openspec/changes/archive/` 中同 slug 的已归档 change，以及已同步到 `openspec/specs/` 的 capability。
-4. **对账台账**：`openspec/coverage/<slug>.md`。不存在时，记入盲区，第 2 步改为全量人工对账。
+3. **OpenSpec change 与生效规范**：在 `openspec/changes/*/proposal.md` 中搜索 slug，并按增量、Feature 号或规则 ID 匹配；也检查 `openspec/changes/archive/`。
+   - 按规则引用定位 `openspec/specs/` 中的现行 capability 及适用 change 的 delta。核对 MODIFIED / REMOVED 等变更，不能把已被替换的历史 Scenario 当作当前要求。历史交付回顾则使用所选时点的规范。
+4. **对账台账**：按当前规则所在的源文档定位 `openspec/coverage/` 中的台账，并核实 `§1 Baseline` 的来源与版本；不固定假设仍是 `<slug>.md`。
+   - 基线化后的规则查主题台账；历史交付回顾可查 `openspec/coverage/archive/*-<slug>.md`，但来源和版本必须匹配。找不到适用台账时记入盲区，第 2 步改为全量人工对账。
 5. **仓库**：从每个 change 的 `proposal.md` 影响仓库表中取仓库名，映射到 `projects/<repo>/`。先读 `projects/AGENTS.md` 和各仓库自己的 `AGENTS.md`。clone 不存在时记入盲区，**不要臆测其内容**。`Freya-Docs-TA` 用于第 6 步的测试覆盖。
-6. **Git 范围**：用户已给出就照用。否则对每个仓库：
-   - `head` = 当前分支（`git branch --show-current`）；
-   - `base` = `git merge-base origin/main HEAD`（`origin/HEAD` 不是 `origin/main` 时用 `origin/HEAD`）；
-   - 当前分支名看起来与本 Feature 无关（不含 slug 关键词，或停在 `main`）时，标为「待确认」。
-   - **范围为空**（`base == head`）通常说明该增量已经合入 `main`。这时在 `git log origin/main` 中按 slug、change 名或 Feature 号找合并 PR，用它的提交范围；找不到就问用户要 PR 号。
-7. **圈定本 Feature 的代码**：feature 分支里常混有其他工作，merge-base diff 可能有几百个文件，不能直接拿来审查。按以下顺序圈定：
-   - 从 `proposal.md` 影响表、`design.md`、`plan.md` 中取实现入口（类名、组件名、端点）；
-   - 用 `git log --no-merges --format='%h %s' <base>..<head>` 按提交 scope 归类（如 `link`、`module-link`），选出与入口相符的 scope。提交信息里通常不写 Feature 号或 phase，不要只按这些关键词筛选；
-   - 以这些提交触及的文件和入口所在文件为审查起点，在范围确认表中写明选了哪些 scope、提交数和文件数。
-8. **已知的已接受偏差**：询问用户或查找 BA 已确认暂缓、豁免的规则（Functional Spec 修订历史中的 deferred、台账 `§4`、用户提供的决策记录）。这些规则不报为发现，在报告「已接受偏差」一节列出。
+6. **固定被审查版本与历史搜索范围**：用户给出的 Git 范围优先；否则每个仓库的 `head` 默认取当前 HEAD，并解析成完整提交 SHA。记录分支和 `git status --short`；除非用户要求审查工作区，否则不把未提交改动混入提交审查，并在范围表注明。
+   - 根据项目约定、upstream 和本地已有引用识别目标集成分支，可以是 `dev`，不固定为 `main`。其 merge-base 仅作历史搜索起点，不是功能边界；`base == head` 不能说明本功能没有改动，也不能据此断定已合入 `main`。
+   - 默认范围遗漏了已合入集成分支的本功能提交时，沿第 7 项的入口和路径向前追溯。显式范围不自行扩大；只有对象缺失或范围仍无法判定时，才请用户提供分支、PR 或时间线索，**不要求用户记 commit，也不要求分支只含本功能**。
+   - 代码、直接依赖与测试证据统一绑定各自固定的 `head`。工作区内容未确认与该版本一致时，用 `git show <head>:<path>`、`git grep ... <head> -- <paths>`、`git ls-tree` 等只读方式读取和搜索，不切换分支；证据行号也必须属于该版本。用户要求审工作区时，单独说明其改动范围，不冒充某个 commit 的内容。
+7. **自动圈定本 Feature 的改动**：由模型按「规则 → 实现入口与路径 → 相关提交 → head 中的完整行为」识别，不把作者、分支名、提交 scope 或 Feature 号作为唯一筛选条件。
+   - 从 `proposal.md`、`design.md`、`plan.md` 及固定版本中的代码取入口，沿直接调用与数据流找到实现路径，再用 Git 历史辅助定位相关改动。
+   - 包括其他开发者合入的同 Feature 代码，以及 merge 后的冲突解决修改。保留 merge commit，必要时与各 parent 比较，检查最终合并结果；不能用 `--no-merges` 筛掉这类修改。
+   - 一个 commit 混有多个功能时，按行为和差异块划分；无关功能排除，共享路径中影响本规则的部分保留。不能仅凭提交信息或文件名决定纳入、排除。
+   - 在范围确认表中写明入口/路径、提交线索及纳排依据、相关提交数和文件数。审查起点是相关改动，最终判断仍须涵盖 head 中满足规则所需的既有实现。
+8. **已知的已接受偏差**：查找 Functional Spec 修订历史、台账 `§4` 或用户提供的决策记录。只有明确决策覆盖的**具体义务/检查点、适用层级、增量及有效期限**才免于重复报告，不能把一个 atom 或测试事项的延期当作整条 BR 的实现豁免。
+   - 核对延期条件是否已到期、后续决策是否已替代；同一事项按最新适用记录判断。仅写 deferred、没有清楚适用范围的，列为待确认，不自行扩展豁免。
+   - 其余检查点照常审查。有效偏差在报告「已接受偏差」列出，并注明本次核对结果；偏差已超出批准范围或到期未满足时照常报告。
 
-把解析结果整理成一张**范围确认表**交给用户：规则数、change、台账、仓库 × 分支 × base..head × diff 文件数。用户确认后再进入第 1 步。用户在参数里已完整指定全部范围时，可以直接继续，但报告开头仍要列出这张表。
+把解析结果整理成一张**范围确认表**交给用户：审查口径、规范与台账版本、规则数、change、仓库 × 分支 × 固定 head/历史范围 × 自动圈定依据及文件数。用户确认后再进入第 1 步。用户已完整指定全部范围时，可以直接继续，但报告开头仍要列出这张表；无需用户逐个选择 commit。
 
 ## 审查方法（按顺序执行）
 
@@ -52,25 +81,25 @@ allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git diff:*), Bash(git mer
 - 带 `OQ-xxx` 或明确待定的规则（候选 U）；
 - 文档中已记录的决策：`REQ-*` 决策表、修订历史中「user-confirmed / BA-confirmed」的条目。这些是**已接受的口径**，按决策后的语义审查。
 
-然后**在搜索代码之前**，把每条规则拆成 3–10 个可检查点，按五要素归类。每个检查点要写成「在代码里能看到什么，就算满足」的形式，例如：
+然后**在搜索代码之前**，按实际独立义务拆出足够的可检查点，按适用的五要素归类，不设固定数量。检查点必须与原规范语义等价，以可观察结果和不变量为准；实现机制只是核查线索，除非规范明确规定，否则不能要求唯一做法。例如：
 
 | 规则原文 | 检查点 |
 | --- | --- |
-| 主结果按文档最后修改时间倒序，相同时间保持稳定顺序 | 查询的 ORDER BY 以文档级修改时间降序为首键；有唯一键作为第二排序键 |
-| 空条件 Apply 不返回无界列表 | 服务端（不只是 UI）在没有任何条件时返回空结果 |
-| Status 可选值包括 Draft、Reviewed、QC Reviewed | 状态选项来源包含这三个值，没有被硬编码为 Approved / Effective |
+| 主结果按文档最后修改时间倒序，相同时间保持稳定顺序 | 首要排序依据是文档级最后修改时间且为倒序；相同时间的顺序稳定。唯一键次序只是可行机制之一，不强制要求 |
+| 空条件 Apply 不返回无界列表 | 无条件请求不会返回无界列表；具体采用拒绝、空结果还是有界返回，以适用规范为准，不自行指定 |
+| Status 可选值包括 Draft、Reviewed、QC Reviewed | 选项包含这三个值；是否还有其他值按规范核对，不自行改成封闭枚举 |
 
 拆解时要求：
-- 重点拆出容易漏的点：取值来源（哪个版本、文档级还是版本级）、组合逻辑（AND / OR）、排序与分页、服务端兜底、Denial behavior 的副作用；
+- 重点拆出容易漏的点：取值来源（哪个版本、文档级还是版本级）、组合逻辑（AND / OR）、排序与分页、适用的服务端校验、Denial behavior 的副作用；
 - 同时写出这些检查点分别该在哪一层验证（后端、前端或两者），作为第 3 步的搜索清单；
-- 检查点清单写进报告的覆盖矩阵依据中，不单独输出。
+- 检查点清单写进报告的覆盖矩阵依据中，不单独输出；规范未明确的行为不补成要求，影响结论时记 U 或请用户确认。
 
 ### 2. FS → OpenSpec
-- 只读台账 `§2 Atom Coverage` 表。`§1` 中的历史段落可能保留同一 atom 在早期增量的 `deferred` 行，不代表当前状态。`§4` 按日期倒序累积，同一 atom 以最新一条记录为准。
-- 先读 `§2`：`✅ covered` 的 atom 采信其 `Covered by` 指向的 Requirement / Scenario，只抽查语义是否一致。
-- 状态不是 covered、缺行，或台账 Baseline 版本落后于 FS 当前版本时，到 change 的 `specs/` 中人工查找对应 Requirement / Scenario。
-- 找不到，或语义不一致 → **D**。
-- 台账 `§4 Findings & Actions` 中已登记且标注为已接受或已延期的事项，不再作为新发现，在报告「已接受偏差」一节列出。
+- 读台账 `§2 Atom Coverage` 表；`§1` 的历史 deferred 段落不代表当前状态。`§4` 同一事项以最新适用记录为准，不覆盖其他义务或增量的判断。
+- `✅ covered` 只作定位线索：核对 `Covered by` 是否仍有效，并逐个确认承载本次义务的 Requirement / Scenario 与所选 FS 口径一致。不能仅凭台账状态或抽样结果给未核对项标 ✅。
+- 已有逐项语义核对记录且源文档与所引用的 OpenSpec 内容均未变化时直接复用；只比较 FS 版本不够，OpenSpec 单独变化也须定向复核。没有可复用依据、非 covered、缺行或版本不符时，按第 0 步定位适用的生效规范或历史版本人工核对，不只找原 change 的 `specs/`。
+- 确认语义不一致或在完整适用范围内确实缺少对应义务 → **D**；尚未读取、无法访问或证据不充分的部分记 U 或盲区，不当作已覆盖或确定缺失。
+- 已接受或延期事项只按第 0 步确定的具体范围处理，报告中列明适用义务与本次核对结果，不免除同规则其余检查点。
 
 ### 3. 规则 → 代码
 对每条 BR，按第 1 步拆出的检查点逐项在代码中定位实现点（Controller / Service / Repository / SQL / Flyway 迁移 / 前端组件或 hook），给出 `file:line`。记录每个检查点是否核对到；没有核对到的检查点要写进报告的盲区，不能默认为满足。五要素的核对要点如下：
@@ -83,7 +112,7 @@ allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git diff:*), Bash(git mer
 | Exceptions | 例外分支是否存在且条件一致 |
 | Denial behavior | 拒绝时的结果（无副作用、错误码、提示、是否部分提交）是否一致 |
 
-优先从 diff 中的改动入手：`git diff --stat <base>..<head>`，再看具体文件。规则行为也可能落在 diff 之外的既有代码里，所以 diff 中没找到时，要在整个仓库中搜索后再下结论。
+优先从第 0 步自动圈定的相关差异入手，再检查固定 head 中的完整实现及直接依赖；不要把混入同一 Git 范围的其他功能纳入审查。规则行为也可能落在 diff 之外，未找到时要在该固定版本的整个仓库中搜索后再下结论，不误读其他版本的工作区文件。
 
 ### 4. 不变量与旁路入口
 对每条 INV，确认代码层面有保证，不只是 UI 层。至少检查以下旁路：
@@ -95,8 +124,8 @@ allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git diff:*), Bash(git mer
 只在 UI 层被保证 → **P**。
 
 ### 5. 反向扫描（找 X）
-遍历 diff 中新增或修改的行为分支（新的条件判断、新端点、新字段写入、新错误码），确认每一处都能追溯到范围内的 BR / INV / OpenSpec Requirement。以下情况记为 **X**：
-- 找不到依据的业务行为（纯重构、日志、技术性防御代码不算）；
+遍历第 0 步圈定差异中新增或修改的相关业务分支（新的条件判断、新端点、新字段写入、新错误码），追溯其适用 BR / INV / OpenSpec Requirement。行为不在本增量清单里时，先核对关联的现行规则及已确认决策，不能直接当作无依据。以下情况记为 **X**：
+- 核对适用规范与决策后仍找不到依据的业务行为（纯重构、日志、技术性防御代码不算）；
 - 「已撤回」清单中的规则在代码中仍然生效。
 
 ### 6. 测试覆盖
@@ -106,7 +135,7 @@ allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git diff:*), Bash(git mer
 
 ## 判定纪律
 
-- 每条发现必须同时给出：规则 ID、规范原文要点、代码证据（`file:line`）、差异说明。缺任何一项都不能作为 Confirmed / Likely 发现。T 类发现没有代码证据，按 taxonomy 中 T 的证据标准判定置信度。
+- 每条发现给出规范依据、差异与影响，以及 taxonomy 对应类型所要求的证据。M / C / P 需要规则 ID、原文要点和固定版本代码路径；D 用规范双方证据，X 可注明无对应规则并列搜索范围，T 用测试证据，U 说明缺口。不为满足统一格式编造规则 ID 或无关代码位置。
 - 没找到实现时，写明搜索过的关键词和目录，置信度记为 **Suspect**，不要直接判定为确定的 Missing。
 - 规范含糊或带 `OQ-xxx` 的，归为 **U**，不要自行推断答案。
 - 只报告明确冲突或明确缺失。「可以更好」的建议只能放在 S4，并标注为建议。
@@ -118,13 +147,13 @@ allowed-tools: Read, Grep, Glob, Bash(git log:*), Bash(git diff:*), Bash(git mer
 
 ## 输出
 
-按 [references/report-template.md](references/report-template.md) 的结构输出，各节顺序不变，某节为空时写「无」。
+按 [references/report-template.md](references/report-template.md) 的结构输出，各节顺序不变，某节为空时写「无」。总评须区分审查完成且无实质问题、审查完成且有发现、审查未完成且存在影响结论的缺口；不能因没有确认 S1 / S2 就判整体通过。
 
 涉及多个仓库（如前后端）或规则较多（超过约 30 条）时，可以按仓库或规则组派发只读子 agent 并行执行第 3–6 步：
 
-- brief 要包含：规则原文的位置、**第 1 步拆出的每条规则检查点**、Git 范围和第 0 步选定的提交 scope、五要素核对表、判定纪律、分类定义、已接受偏差清单，并要求子 agent 只读、不运行测试，逐个检查点返回「已核对 / 未核对」及证据。
+- brief 要包含：实际规范和台账路径/版本、审查口径、**第 1 步拆出的每条规则检查点**、各仓库固定 head 和自动圈定的相关路径/提交依据、工作区是否纳入、五要素核对表、判定纪律、分类定义、具体有效的已接受偏差，并要求子 agent 只读、不运行测试、不继续委派，逐个检查点返回「已核对 / 未核对」及所属版本证据。
 - 子 agent 启动失败（例如模型不可用）时，改用 fork 或在当前会话中执行，不要反复重试同一配置。
 - 汇总时：
   - 去重；
   - 把一个子 agent 留给其他层确认的问题（「需要前端确认……」「需要后端交叉核对……」），用另一层的证据逐条闭合。闭合后不再列为 Suspect，在报告中注明已交叉核对；
-  - 至少抽查每条 S1–S3 发现的 `file:line`，抽查通过才能标为 Confirmed。
+  - 对每条 S1–S3 发现核对其类型要求的原始证据及版本；涉及实现时核对 `file:line` 和可达路径。只有满足 taxonomy 的完整证据条件才能标为 Confirmed，不能仅凭子 agent 自报或局部抽查升级置信度。

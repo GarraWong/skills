@@ -1,0 +1,46 @@
+# 操作系统文件
+.DS_Store
+.AppleDouble
+._*
+Thumbs.db
+Desktop.ini
+
+# IDE 和编辑器本地配置
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# 本地环境变量（保留示例配置）
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# 依赖、虚拟环境和缓存
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 构建和测试产物
+build/
+dist/
+target/
+*.class
+coverage/
+.coverage
+htmlcov/
+
+# 日志和临时文件
+*.log
+*.tmp
+*.temp

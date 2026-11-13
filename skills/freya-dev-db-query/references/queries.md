@@ -1,12 +1,12 @@
 # Common read-only queries
 
-Use against the **rendition** database unless noted. `pdf_rendition_task.status`: 0 PENDING, 1 PROCESSING, 2 SUCCESS, 3 FAILED.
+Use these against the rendition database unless noted. `pdf_rendition_task.status`: 0 PENDING, 1 PROCESSING, 2 SUCCESS, 3 FAILED.
 
 ECS in-flight: `status = 1 AND resource_tier IS NOT NULL`.
 
 Column names: `error_msg`, `relate_id`, `relate_version_id`. There is no `error_message` or `document_version_id`.
 
-The helper already prints epoch-ms columns as `millis (yyyy-MM-dd HH:mm:ss.SSS +08:00)`. Do not convert them again.
+[`scripts/query.mjs`](../scripts/query.mjs) prints epoch-millisecond columns as `millis (yyyy-MM-dd HH:mm:ss.SSS +08:00)`. Do not convert them again.
 
 ## Latest task
 
@@ -47,4 +47,4 @@ GROUP BY resource_tier
 ORDER BY resource_tier;
 ```
 
-For AWS-side concurrency after UI triggers (not this JDBC path): cluster `onerim-content-docs-dev-cluster`, worker family `docs-rendition-worker-dev-task-definition`, logs `/ecs/docs-rendition-worker-dev-task-definition`.
+For AWS-side concurrency after UI triggers (not this query path): cluster `onerim-content-docs-dev-cluster`, worker family `docs-rendition-worker-dev-task-definition`, logs `/ecs/docs-rendition-worker-dev-task-definition`.

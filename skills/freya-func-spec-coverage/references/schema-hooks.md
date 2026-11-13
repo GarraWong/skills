@@ -51,8 +51,9 @@ Block to append:
 ```
       UPSTREAM COVERAGE GATE (graceful fallback) — run AFTER the spec files are
       written and BEFORE api-contract:
-      - If `func-spec-coverage` appears in your available skills, invoke it via
-        the Skill tool with args `spec <change-name>`.
+      - If `freya-func-spec-coverage` is available to you as a skill, invoke it
+        with the arguments `spec <change-name>`. An install still named
+        `func-spec-coverage` is the same skill; invoke that instead.
       - Otherwise skip the gate and warn the user ONCE that upstream coverage
         was not reconciled. Do NOT STOP for a missing skill.
       It maintains openspec/coverage/<source-doc>.md — one file per functional
@@ -104,10 +105,11 @@ but distinct "Keep the contract scoped to what THIS change touches.")
 Block to append:
 
 ```
-      UPSTREAM COVERAGE GATE (graceful fallback) — run AFTER test-spec.md is
-      written and BEFORE plan:
-      - If `func-spec-coverage` appears in your available skills, invoke it via
-        the Skill tool with args `test <change-name>`.
+      UPSTREAM COVERAGE GATE (graceful fallback) — run AFTER the test spec is
+      written (`test-spec.md` or a `test-spec/` package) and BEFORE plan:
+      - If `freya-func-spec-coverage` is available to you as a skill, invoke it
+        with the arguments `test <change-name>`. An install still named
+        `func-spec-coverage` is the same skill; invoke that instead.
       - Otherwise skip the gate and warn the user ONCE. Do NOT STOP for a
         missing skill.
       It appends a `TC-ID(s)` column to openspec/coverage/<source-doc>.md §2:
@@ -117,8 +119,8 @@ Block to append:
       Scenario that no case exercises.
       BLOCKING: an atom covered by THIS change with no TC-ID and no §4
       justification blocks plan. A justification must name the follow-up test
-      that will cover it (integration/unit); pointing at test-spec.md §4 without
-      naming a test is not a justification.
+      that will cover it (integration/unit); pointing at the test spec's §4
+      without naming a test is not a justification.
 ```
 
 ---
@@ -140,7 +142,7 @@ Use only the delta sections you need.
 
 **Source:** is the durable link back to the upstream business rules a Scenario
 implements. Omit it if the project keeps no upstream rules index. Where it does,
-the `func-spec-coverage` gate writes and verifies these lines; a Scenario that
+the `freya-func-spec-coverage` gate writes and verifies these lines; a Scenario that
 covers upstream rules and declares no Source is a finding.
 
 It sits on the Scenario, not the Requirement, because a Scenario is what a rule

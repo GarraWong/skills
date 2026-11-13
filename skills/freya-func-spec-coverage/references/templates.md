@@ -125,4 +125,4 @@ When acceptance cases exist, append a `TC-ID(s)` column to `§2` rather than
 creating a second file. `§2` is parsed by column name, so nothing else shifts.
 Each cited TC-ID must match `TC-{CAP}-{NNN}-{KIND}-{ST}` and appear in the test
 spec of the change named in that row's `Covered by` path — either its
-`test-spec.md` or any file of its `test_spec/` package.
+`test-spec.md` or any file of its `test-spec/` package.

@@ -6,8 +6,8 @@ every section this chapter does not need.
 **Size the chapter to its content.** Under ~10 rules, keep the Domain Model to
 Overview + Key Terms + Actors (plus invariants if any exist) and drop Derived
 Views entirely — scaffolding that outweighs its content makes a chapter less
-readable, not more. See `SKILL.md` for the sizing table, and
-`references/rule-template.md` for every field and view rule referenced below.
+readable, not more. See [../SKILL.md](../SKILL.md) for the sizing table, and
+[rule-template.md](rule-template.md) for every field and view rule referenced below.
 
 Section order is reading order: `## Domain Model` → `## Derived Views` →
 `## Business Rules`. Rules go last because they are looked up by ID, not read
@@ -109,7 +109,7 @@ Business analysts, QA, implementation, support, compliance reviewers.
 
 **Invariant**: <single structural statement in normative language>
 
-**Related rules**: <BR-xxx that specialise it>
+**Related rules**: <BR-xxx / FR-xxx that specialise it>
 
 ---
 
@@ -187,7 +187,9 @@ Business analysts, QA, implementation, support, compliance reviewers.
 
      Fields: Applies to / Trigger / Rule always; Preconditions / Exceptions /
      Denial behavior / Related rules only when they carry information — omit the
-     line, never pad with None or N/A. Example is optional and non-normative. -->
+     line, never pad with None or N/A. Example is optional and non-normative.
+
+     Prefix: BR- below; new rules in a feature document use FR- instead. -->
 
 | Group | Rules | Covers |
 | --- | --- | --- |

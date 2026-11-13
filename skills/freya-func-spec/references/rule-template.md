@@ -8,7 +8,7 @@ Examples below use placeholder domain codes (`ORD` orders, `ACCT` accounts,
 
 | Atom | ID | Use when |
 |------|----|----------|
-| Business rule | `BR-{DOMAIN}-{NNN}` | An action or event invokes the statement |
+| Business rule | `BR-{DOMAIN}-{NNN}` (`FR-` in a feature document) | An action or event invokes the statement |
 | Invariant | `INV-{DOMAIN}-{NN}` | The statement is true before, during, and after every action in the domain |
 
 ---
@@ -115,11 +115,11 @@ self-explanatory.
 
 **Rationale**: <optional — why the product works this way>
 
-**Related rules**: <BR-xxx that specialise it>
+**Related rules**: <BR-xxx / FR-xxx that specialise it>
 ```
 
 An invariant is not a rule with the Trigger deleted. Test: if you can name an
-action that invokes it, it is a `BR`. If it holds before, during, and after every
+action that invokes it, it is a rule (`BR`/`FR`). If it holds before, during, and after every
 action in the domain, it is an invariant.
 
 ### What belongs here
@@ -163,7 +163,7 @@ one. Keep both:
 | On Hold | All state transitions | None (user-initiated) | BR-ORD-005 |
 
 Each row representing a distinct testable constraint still needs its own
-`BR-xxx` in the index.
+`BR-xxx` / `FR-xxx` in the index.
 
 ### Flows
 

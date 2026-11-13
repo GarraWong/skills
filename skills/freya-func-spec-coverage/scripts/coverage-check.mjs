@@ -21,8 +21,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const ATOM = /^BR-[A-Z0-9]+-\d{3}(?:\.(?:D|E|P)?\d+)?$/
-const RULE = /^BR-[A-Z0-9]+-\d{3}/
+const ATOM = /^(?:BR|FR)-[A-Z0-9]+-\d{3}(?:\.(?:D|E|P)?\d+)?$/
+const RULE = /^(?:BR|FR)-[A-Z0-9]+-\d{3}/
 // TC-{CAP}-{NNN}-{KIND}-{ST}. The KIND and ST vocabularies are a property of the
 // host project's test-spec convention, not of this check — so the default only
 // asserts the SHAPE (five segments, a 3-digit ordinal, two uppercase tokens) and
@@ -152,8 +152,8 @@ function walk (dir, name, hits = []) {
   return hits
 }
 
-// A test spec is either one `test-spec.md` at the change root or a `test_spec/`
-// package of several files — both conventions are in use, and which one a
+// A test spec is either one `test-spec.md` at the change root or a `test-spec/`
+// package of several files (legacy name `test_spec/`) — both conventions are in use, and which one a
 // project picked is not this check's business. Resolve to the FILE LIST so
 // "does a test spec exist yet" and "does this TC-ID appear in it" work either
 // way; a package's TC-IDs routinely live in a child file, not the index.
@@ -189,7 +189,7 @@ if (indexMd === null) {
     const link = r.slice(1).map(linkTarget).find(v => /\.md$/.test(v))
     ruleDoc.set(id, link ? path.resolve(dir, link) : null)
   }
-  if (!ruleDoc.size) ledger('L00', `no BR-xxx rows parsed from ${opt.index}`)
+  if (!ruleDoc.size) ledger('L00', `no BR-xxx / FR-xxx rows parsed from ${opt.index}`)
 }
 
 // ── downstream requirements, across every active change ──────────────────────
@@ -216,7 +216,7 @@ function parseSpec (file, changeName, cap) {
     if (s) {
       const target = sc ?? cur
       if (s[1].includes('<!--')) target.placeholder = true
-      else for (const id of s[1].match(/BR-[A-Z0-9]+-\d{3}/g) || []) target.source.add(id)
+      else for (const id of s[1].match(/(?:BR|FR)-[A-Z0-9]+-\d{3}/g) || []) target.source.add(id)
     }
     if (sc) sc.body.push(line)
     cur.body.push(line)
@@ -349,7 +349,7 @@ for (const f of covFiles) {
     if (ATOM.test(id)) s4Text.set(id, r.join(' '))
   }
   const namesATest = id => /TC-[A-Z0-9-]+-\d{3}|\b\w+(?:Test|Tests|IT|Spec)\b/.test(s4Text.get(id) ?? '')
-  const dataRows = rows2.filter(r => ATOM.test(clean(r[0])) || /^BR-/.test(clean(r[0])))
+  const dataRows = rows2.filter(r => ATOM.test(clean(r[0])) || /^(?:BR|FR)-/.test(clean(r[0])))
   if (!dataRows.length) ledger('C05', `${rel} §2 has no atom rows`)
 
   for (const r of dataRows) {

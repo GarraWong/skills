@@ -1,6 +1,6 @@
 # Atomization
 
-Splitting an upstream `BR-{DOMAIN}-{NNN}` rule into atoms is the step that
+Splitting an upstream `BR-{DOMAIN}-{NNN}` (or `FR-`) rule into atoms is the step that
 catches real omissions. Get the granularity wrong and the whole trace is
 theatre: a rule marked `covered` because two of its six clauses landed.
 

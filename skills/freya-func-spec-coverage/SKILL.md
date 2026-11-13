@@ -1,6 +1,6 @@
 ---
-name: func-spec-coverage
-description: Reconcile the OpenSpec specs of a project against the upstream functional spec (BR-xxx business rules), maintaining one coverage ledger per source document under openspec/coverage/. Runs as a gate inside the SDD flow after specs and after test-spec. Use when checking whether spec.md / test-spec.md missed anything from the functional spec, when the user mentions trace, traceability, rule coverage, atomization, coverage gap between functional-spec and openspec, 对账, 覆盖对账, 是否遗漏, BR 覆盖, or asks to verify a change is aligned with the business rules.
+name: freya-func-spec-coverage
+description: Reconcile a project's OpenSpec specs against its upstream functional spec (BR-xxx / FR-xxx business rules), keeping one coverage ledger per source document under openspec/coverage/. Use when the user asks whether spec.md, test-spec.md, or a test-spec package missed anything from the functional spec, asks to verify a change against the business rules, or mentions trace, traceability, rule coverage, atomization, coverage gap, 对账, 覆盖对账, 是否遗漏, or BR 覆盖.
 ---
 
 # Functional Spec ↔ OpenSpec Coverage
@@ -62,18 +62,19 @@ only because the two were produced separately — generate one from the other an
 you are verifying a generator against its own output. Atomize from the
 functional spec alone, before opening any downstream file.
 
-## Invocation
+## Stages
 
-```
-/func-spec-coverage [spec|test|all] [<change-name>]
-```
+The skill takes one stage argument, however the host passes arguments — as a
+command argument, or stated in the request. Default to `all` when none is given.
 
-- `spec` — stage 1. After `specs/**/spec.md`, **before** `api-contract`.
-- `test` — stage 2. After `test-spec.md`, **before** `plan`.
-- `all` (default) — both.
+| Stage | When it runs |
+|-------|--------------|
+| `spec` | stage 1. After `specs/**/spec.md`, **before** `api-contract`. |
+| `test` | stage 2. After the change's test spec (`test-spec.md` or a `test-spec/` package), **before** `plan`. |
+| `all` (default) | both |
 
-A change name scopes only the *gate*; the reconciliation itself is always
-domain-wide.
+An optional change name may follow the stage. It scopes only the *gate*; the
+reconciliation itself is always domain-wide.
 
 > The frontmatter `description` carries a few non-English trigger phrases so the
 > skill matches how its users ask for it. Match keywords only — deliberate, not
@@ -83,7 +84,7 @@ domain-wide.
 
 | Check | Edge it guards |
 |-------|----------------|
-| **This skill** | BR-xxx atoms → `specs/**/spec.md` → `test-spec.md` |
+| **This skill** | BR-xxx / FR-xxx atoms → `specs/**/spec.md` → `test-spec.md` or `test-spec/` |
 | schema `verify` / `openspec-verify-change` | Scenario → TC-ID, plan tasks, delta sync |
 | apply-phase code review | `plan.md` → code |
 
@@ -98,12 +99,12 @@ Defaults, not requirements — the first two are overridable with `--index` and
 | Upstream index | `functional-spec/appendix/business-rules-index.md` |
 | Coverage ledgers | `openspec/coverage/<source-doc>.md` |
 | Downstream specs | `openspec/changes/<c>/specs/<capability>/spec.md` |
-| Downstream tests | `openspec/changes/<c>/test-spec.md` **or** a `test_spec/` package |
+| Downstream tests | `openspec/changes/<c>/test-spec.md` **or** a `test-spec/` package (legacy `test_spec/` also read) |
 | Anchors | one `**Source:** BR-xxx` line per covered Requirement |
 
 What a host project must actually provide:
 
-1. **Stable rule IDs** matching `BR-{DOMAIN}-{NNN}`, registered in one index
+1. **Stable rule IDs** matching `BR-{DOMAIN}-{NNN}` or `FR-{DOMAIN}-{NNN}`, registered in one index
    that links each ID to its chapter.
 2. **Field-structured rules** — `**Rule**` plus, where they apply,
    `**Exceptions**`, `**Denial behavior**`, `**Preconditions**`. The atomizer
@@ -116,7 +117,7 @@ one regex adjusted — `ATOM` / `RULE` at the top of `scripts/coverage-check.mjs
 Two things vary by project and are handled without editing the script:
 
 - **Test-spec layout** — a single `test-spec.md` at the change root and a
-  `test_spec/` directory package are both accepted, and a package's child files
+  `test-spec/` directory package (legacy name `test_spec/`) are both accepted, and a package's child files
   are searched too, because its TC-IDs often live there rather than in the index.
 - **TC-ID vocabulary** — the default grammar asserts only the shape
   `TC-{CAP}-{NNN}-{KIND}-{ST}`, since `KIND` / `ST` belong to the host project's
@@ -130,9 +131,10 @@ gate is a no-op, never a blocker.
 A context that just authored a spec will confirm its own coverage, and inside
 the SDD flow this skill runs immediately after that authoring.
 
-1. **Dispatch a fresh subagent** for the matching, handing it only file paths and
-   these instructions — never the session history that produced the artifacts.
-   If subagents are unavailable, say so in §1 and run inline.
+1. **Dispatch a fresh agent or a clean context** for the matching, handing it
+   only file paths and these instructions — never the session history that
+   produced the artifacts. If the host cannot spawn one, say so in §1 and run
+   inline.
 2. **Quote, never confirm.** Never ask "is BR-xxx covered?". Demand the covering
    text verbatim. Absence of a quote *is* the finding — and the checker verifies
    every quote still appears in the cited spec, so a paraphrase does not survive.
@@ -140,7 +142,10 @@ the SDD flow this skill runs immediately after that authoring.
 ## Seeding or extending a ledger
 
 Once per source document, and again only on a version bump. Rules and a worked
-example: [references/atomization.md](references/atomization.md).
+example: [references/atomization.md](references/atomization.md). The ledger's
+own four-section layout, with a filled example to copy:
+[references/templates.md](references/templates.md) — the checker parses the
+section numbers and the `§2` header row, so keep both exactly as shown.
 
 **Seed:** atomize every rule the index maps to the document, `**Denial
 behavior**` and `**Exceptions**` **first** — the top two omission sources,
@@ -380,12 +385,17 @@ blocked, not whichever change was nominally assigned the rule.
 
 ## Check
 
+Needs `node` (ES modules, no dependencies). The script path is relative to this
+skill's directory; the repo it checks is `--root`, which defaults to the current
+directory — so run it from the project root, or pass `--root`.
+
 ```bash
-node .claude/skills/func-spec-coverage/scripts/coverage-check.mjs [<change>] [--json]
+node scripts/coverage-check.mjs [<change>] [--root <repo>] [--json]
 ```
 
 Options: `--root`, `--index`, `--coverage`, `--tc`, `--json`. Omit the change
-name for domain-level checks with no gate.
+name for domain-level checks with no gate. It only reads; every fix is an edit
+you make to the ledger or a spec.
 
 | exit | meaning | fix where |
 |------|---------|-----------|
@@ -419,3 +429,16 @@ grep -c "Source:" openspec/schemas/super-flow-normal/templates/spec.md
 ```
 
 Expect `2` and non-zero.
+
+## Completion
+
+Report:
+
+- The stage run (`spec` / `test`), the change gated if any, and the checker's
+  exit code.
+- The rollup per ledger, then **every** `⛔ contradiction` and `❌ uncovered`
+  atom in full — uncovered ones labelled domain-level.
+- Ledgers created or extended, and the version each is pinned to.
+- `Source:` anchors written, and the result of `openspec validate <change>`.
+- Whether the matching ran in a fresh context or inline — inline weakens the
+  result and belongs in §1 of the ledger too.

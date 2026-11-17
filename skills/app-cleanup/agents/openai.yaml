@@ -1,0 +1,4 @@
+interface:
+  display_name: "应用盘点与分类清理"
+  short_description: "先确认读取范围，再分类审批清理，用跨平台脚本验证删除结果与保留内容"
+  default_prompt: "使用 $app-cleanup 盘点指定软件及浏览器中的相关内容：先说明读取范围并等我确认，再只读生成分类清单，逐类确认清理并验证结果。"

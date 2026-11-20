@@ -18,7 +18,19 @@ The name is the prefix plus the tenant id, with no extra separator. The tenant i
 | `dso-sws` | docs | `ff-silo-sws-dso-db-cluster` | `ff-silo-sws-dso-db-cluster0` |
 
 Rendition tables (`pdf_rendition_task`, `pdf_rendition`, `sync_cursor`) live in the rendition database.
-Docs tables (`document_version`) live in the docs database.
+Docs tables (`document`, `document_version`) live in the docs database.
+
+## Schema
+
+Business tables are in the `public` schema. Qualify them (`public.document`) in counts and reports. Some tenant databases carry an extra schema with tables of the same names, for example data loaded for a one-off test. Do not include it unless the user asks. When a result does not match what the user expects, list the schemas before guessing:
+
+```sql
+SELECT table_schema, COUNT(*) AS table_count
+FROM information_schema.tables
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+GROUP BY table_schema
+ORDER BY table_schema;
+```
 
 No rendition prefix is recorded for `dso-sws`. Asking for `--kind rendition` there stops with an error. Ask the user for the full database name and pass `--database`, or have them add the prefix to the connection file (below). Do not guess a name.
 

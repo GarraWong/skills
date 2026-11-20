@@ -6,7 +6,7 @@ Only the user can create a working tunnel. AWS credentials expire.
 
 ## What the query path needs
 
-After the tunnel is up, `psql` needs the local listen address from the connection file (`host` and `port`). Instance ids and the RDS hostname are not used when querying.
+After the tunnel is up, the query (through `psql` or JDBC) needs the local listen address from the connection file (`host` and `port`). Instance ids and the RDS hostname are not used when querying.
 
 `localPortNumber` in the SSM command must equal the `port` value in that connection's file. Each connection has its own file and its own local port; see [connections.md](connections.md).
 

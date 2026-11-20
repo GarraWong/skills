@@ -36,7 +36,7 @@ Placeholder values such as `REPLACE_ME` count as missing.
 
 | Flags | Result |
 | --- | --- |
-| `--env <env>` | The one file whose `envs` lists `<env>`. Two files listing it is an error: pass `--conn`. |
+| `--env <env>` | The one `postgres` file whose `envs` lists `<env>`; redis and tcp files are skipped. Two `postgres` files listing it is an error: pass `--conn`. |
 | `--conn <name>` | That file. Its first `envs` entry is the environment unless `--env` is also passed. |
 | `--conn <name> --env <env>` | That file, and `<env>` must be in its `envs` when the key is present. |
 | neither | `--env dev`. |
@@ -72,7 +72,7 @@ Prints one row per connection: environments, type, local address, whether that a
 node scripts/check-config.mjs
 ```
 
-Run it after the skill is updated, after a file is edited, or when a query fails before it reaches the database. It checks Node and `psql`, then every connection file, and prints one line per finding:
+Run it after the skill is updated, after a file is edited, or when a query fails before it reaches the database. It checks Node and the query tool (`psql`, or Java with the PostgreSQL JDBC driver), then every connection file, and prints one line per finding:
 
 ```
 LEVEL  CONNECTION  message

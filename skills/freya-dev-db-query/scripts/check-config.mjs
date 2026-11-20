@@ -14,12 +14,15 @@
 
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import path from 'node:path'
 import {
   FILE_SUFFIX,
   LOGIN_KEYS,
   NAME,
   TYPES,
   configDir,
+  findJava,
+  findJdbcDriver,
   findPsql,
   prefixTable,
   readConnections,
@@ -61,7 +64,18 @@ function checkTools() {
 
   const psql = findPsql()
   if (!psql) {
-    add('ERROR', '-', `psql was not found on PATH; queries cannot run. Install the PostgreSQL client tools, ${MIN_PSQL} or newer`)
+    const java = findJava()
+    const jar = findJdbcDriver()
+    if (java && jar) {
+      add('OK', '-', `psql not found; queries use the JDBC fallback (java on PATH, driver ${path.basename(jar)})`)
+      return
+    }
+    add(
+      'ERROR',
+      '-',
+      `psql was not found on PATH and the JDBC fallback is incomplete (java ${java ? 'found' : 'missing'}, ` +
+        `PostgreSQL driver in ~/.m2 ${jar ? 'found' : 'missing'}). Install psql ${MIN_PSQL}+, or Java 11+ with the driver`,
+    )
     return
   }
   const result = spawnSync(psql, ['--version'], { encoding: 'utf8', timeout: 5000, windowsHide: true })

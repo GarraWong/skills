@@ -14,11 +14,12 @@ Read tenant rows through the local port-forward the user already started. Do not
 - Never call a secrets store. Never put credentials in the chat or the repository. Do not open a connection file to read it; use `--list` or the configuration check, which read it redacted.
 - [`scripts/query.mjs`](scripts/query.mjs) opens a read-only session and rejects mutating SQL, `SET`, and psql meta-commands. Do not work around a rejection. This skill does not run writes.
 - If credentials are missing or the host and port are not listening, stop. Do not invent rows.
+- Query only through `scripts/query.mjs`. Do not write your own database client, even when `psql` is missing: the script falls back to JDBC by itself, and if it says neither is available, stop and tell the user what to install.
 - Report a failed connection and a failed query separately. Both end the task.
 
 ## Connections
 
-One file per connection (one tunnel) in `.freya` under the user home directory: `<connection>.credentials`. A user with several AWS accounts has several files, each with its own local port and login. The `envs` key of a file lists the environments its tunnel reaches, and `--env` finds the file that way. Keys and selection rules are in [references/connections.md](references/connections.md).
+One file per connection (one tunnel) in `.freya` under the user home directory: `<connection>.credentials`. A user with several AWS accounts has several files, each with its own local port and login. The `envs` key of a file lists the environments its tunnel reaches, and `--env` finds the file that way. `--env` considers `postgres` connections only, so a redis file listing the same environment never wins. Keys and selection rules are in [references/connections.md](references/connections.md).
 
 | Environment | Usual connection | Note |
 | --- | --- | --- |
@@ -36,13 +37,13 @@ It prints each connection's environments, local address, and whether that addres
 
 ## Checking the configuration
 
-Run the check when a query fails before it reaches the database, when the user says the skill stopped working after an update, or when the user asks whether their configuration is right:
+Run the check once before the first query in a session, when a query fails before it reaches the database, when the user says the skill stopped working after an update, or when the user asks whether their configuration is right:
 
 ```
 node scripts/check-config.mjs
 ```
 
-[`scripts/check-config.mjs`](scripts/check-config.mjs) checks Node, `psql`, and every connection file. It prints one line per finding, as level, connection, and message, and exits 1 when any line is an `ERROR`. A closed tunnel is not an error.
+[`scripts/check-config.mjs`](scripts/check-config.mjs) checks Node, the query tool (`psql`, or the JDBC fallback), and every connection file. It prints one line per finding, as level, connection, and message, and exits 1 when any line is an `ERROR`. A closed tunnel is not an error.
 
 The output is redacted and safe to show: no username, no password, no content of a line the script does not recognise, and no value that failed a check. What is hidden and why is in [references/connections.md](references/connections.md).
 
@@ -55,7 +56,8 @@ Report the `ERROR` and `WARN` lines to the user with the file name and line numb
 | Environment | `dev`. Pass another `--env` only when the user names that environment. |
 | Connection | Chosen from `--env`. Pass `--conn <name>` only when the user names a connection, or the script says two files claim the environment. |
 | Tenant | `0` |
-| Database kind | `rendition` where the environment has one, else its only kind. Use `docs` for document tables such as `document_version`. |
+| Database kind | `rendition` where the environment has one, else its only kind. Use `docs` for document tables such as `document` and `document_version`. |
+| Schema | `public`. Qualify docs tables as `public.<table>`; see [references/databases.md](references/databases.md#schema). |
 | Local address | `host` and `port` from the connection file. `--host` and `--port` override them. There is no flag for the password. |
 | Time zone | Epoch-millisecond columns print as millis plus `+08:00`. Do not convert them again. |
 
@@ -84,10 +86,10 @@ If the script says no connection declares the environment, tell the user which c
 node scripts/query.mjs --env dev --tenant 0 --kind rendition --sql "<SQL>"
 ```
 
-   Use `--sql-file` when the statement is easier to pass as a file. Use `--database` only when the user already gave a full database name. Requires Node 18 or newer and `psql` 12 or newer on `PATH`.
+   Use `--sql-file` when the statement is easier to pass as a file. Use `--database` only when the user already gave a full database name. Requires Node 18 or newer and either `psql` 12 or newer on `PATH`, or Java 11 or newer with the PostgreSQL JDBC driver in the local Maven repository (`~/.m2`, or `FREYA_PG_JDBC_JAR`). The script uses `psql` when it finds one and prints which tool it used.
 3. The script checks that the connection's host and port accept TCP within one second, then runs the query. If the check fails, tell the user which connection is not listening and give them the command the script printed. Do not run it for them.
 4. If the environment blocks TCP to the local machine, run the same command where local connections are allowed. Still do not invent rows.
 
 ## Completion
 
-Report the connection and database the script printed, then the rows: id, status meaning, resource tier, and the formatted times. For concurrency, use in-flight ECS rows (`status = 1` and `resource_tier` set) or overlapping `start_at` values, not the single latest SUCCESS row. Do not dump a whole table or source object keys unless the user asked. Keep the report short.
+Report the connection and database the script printed, then the rows. For counts from the docs database, give active and soft-deleted numbers. For rendition tasks: id, status meaning, resource tier, and the formatted times. For concurrency, use in-flight ECS rows (`status = 1` and `resource_tier` set) or overlapping `start_at` values, not the single latest SUCCESS row. Do not dump a whole table or source object keys unless the user asked. Keep the report short.

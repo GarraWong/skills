@@ -48,3 +48,26 @@ ORDER BY resource_tier;
 ```
 
 For AWS-side concurrency after UI triggers (not this query path): cluster `onerim-content-docs-dev-cluster`, worker family `docs-rendition-worker-dev-task-definition`, logs `/ecs/docs-rendition-worker-dev-task-definition`.
+
+## Docs database
+
+Run these with `--kind docs`. Tables are in `public`; see [databases.md](databases.md#schema). `is_delete = true` is a soft delete: the row stays in the table. Report active and deleted counts separately unless the user asked for one of them.
+
+### Document and version counts
+
+```sql
+SELECT
+  (SELECT COUNT(*) FROM public.document) AS documents,
+  (SELECT COUNT(*) FROM public.document WHERE is_delete IS NOT TRUE) AS documents_active,
+  (SELECT COUNT(*) FROM public.document_version) AS versions,
+  (SELECT COUNT(*) FROM public.document_version WHERE is_delete IS NOT TRUE) AS versions_active;
+```
+
+### Columns of a table
+
+```sql
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'document_version'
+ORDER BY ordinal_position;
+```

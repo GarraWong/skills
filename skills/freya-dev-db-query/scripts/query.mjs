@@ -6,7 +6,8 @@
 //   node query.mjs --list
 //   node query.mjs --tunnel-command [--env dev | --conn dev-db]
 //
-// Node 18+ and psql. Same flags on Windows and macOS.
+// Node 18+, and psql 12+ or (fallback) Java 11+ with the PostgreSQL JDBC driver
+// in the local Maven repository. Same flags on Windows and macOS.
 // One file per connection: $HOME/.freya/<connection>.credentials (USERPROFILE on
 // Windows). --env picks the file whose `envs` key lists that environment;
 // --conn names the file directly. --host and --port override the file.
@@ -20,6 +21,8 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 
 const PLACEHOLDER = /^(REPLACE_ME|REPLACE_WITH_YOUR_LOCAL_PORT|<[^>]*>)$/i
 const BLOCKED_SQL = /\b(INSERT|UPDATE|DELETE|MERGE|ALTER|DROP|TRUNCATE|CREATE|GRANT|REVOKE|CALL|COPY|VACUUM|INTO|SET|RESET|BEGIN|DO|EXECUTE|PREPARE|DEALLOCATE|LOCK)\b/i
@@ -284,6 +287,12 @@ export function readConnections(dir = configDir(), { redact = false } = {}) {
 }
 
 // Pick the connection for --conn or --env. Returns { connection, env }.
+// postgres when the type key is absent; 'invalid' for a value not in TYPES.
+export function connectionType(connection) {
+  const raw = (real(connection.map.type) || 'postgres').toLowerCase()
+  return TYPES.includes(raw) ? raw : 'invalid'
+}
+
 export function selectConnection(connections, { conn, env, dir = configDir() }) {
   const found = connections.length ? connections.map(describe).join('; ') : 'none'
   if (conn) {
@@ -300,9 +309,12 @@ export function selectConnection(connections, { conn, env, dir = configDir() }) 
     return { connection, env: env || connection.envs[0] || '' }
   }
   const wanted = env || DEFAULT_ENV
+  // --env picks a database connection. A redis or tcp file that lists the
+  // same env (dev-redis next to dev-db) must not win the match.
+  const databases = connections.filter((item) => connectionType(item) === 'postgres')
   // A file that names the env wins over the dev-db legacy default.
-  let matches = connections.filter((item) => item.declared.includes(wanted))
-  if (matches.length === 0) matches = connections.filter((item) => item.envs.includes(wanted))
+  let matches = databases.filter((item) => item.declared.includes(wanted))
+  if (matches.length === 0) matches = databases.filter((item) => item.envs.includes(wanted))
   if (matches.length > 1) {
     throw new Error(
       `Env ${wanted} is declared by several connections: ${matches.map((item) => item.name).join(', ')}. Pass --conn.`,
@@ -553,6 +565,68 @@ export function findPsql() {
   return null
 }
 
+function findOnPath(names, extraDirs = []) {
+  const dirs = [...(process.env.PATH || '').split(path.delimiter).filter(Boolean), ...extraDirs]
+  for (const dir of dirs) {
+    for (const name of names) {
+      const full = path.join(dir, name)
+      try {
+        if (fs.statSync(full).isFile()) return full
+      } catch {
+        // keep looking
+      }
+    }
+  }
+  return null
+}
+
+function compareVersions(a, b) {
+  const pa = a.split(/[.-]/).map((part) => Number(part) || 0)
+  const pb = b.split(/[.-]/).map((part) => Number(part) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0)
+    if (diff) return diff
+  }
+  return 0
+}
+
+// The newest PostgreSQL JDBC driver in the local Maven repository, or the jar
+// named by FREYA_PG_JDBC_JAR. Never downloads anything.
+export function findJdbcDriver() {
+  const override = process.env.FREYA_PG_JDBC_JAR
+  if (override) return fs.existsSync(override) ? override : null
+  const base = path.join(os.homedir(), '.m2', 'repository', 'org', 'postgresql', 'postgresql')
+  let versions = []
+  try {
+    versions = fs.readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  } catch {
+    return null
+  }
+  versions.sort(compareVersions).reverse()
+  for (const version of versions) {
+    const jar = path.join(base, version, `postgresql-${version}.jar`)
+    if (fs.existsSync(jar)) return jar
+  }
+  return null
+}
+
+// Java 11 or newer runs QueryJdbc.java directly from source.
+export function findJava() {
+  const names = process.platform === 'win32' ? ['java.exe'] : ['java']
+  const javaHome = process.env.JAVA_HOME ? [path.join(process.env.JAVA_HOME, 'bin')] : []
+  return findOnPath(names, javaHome)
+}
+
+// How queries run on this machine: psql when installed, else Java + JDBC.
+export function findRunner() {
+  const psql = findPsql()
+  if (psql) return { kind: 'psql', psql }
+  const java = findJava()
+  const jar = findJdbcDriver()
+  if (java && jar) return { kind: 'jdbc', java, jar }
+  return { kind: 'none', java, jar }
+}
+
 function runPsql(bin, args, env) {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
@@ -575,6 +649,66 @@ function runPsql(bin, args, env) {
   })
 }
 
+// psql reads the password from PGPASSWORD and the read-only session from
+// PGOPTIONS, so neither is on the command line.
+function psqlCommand(psql, conn, database, sqlFile) {
+  return {
+    bin: psql,
+    args: [
+      '-X',
+      '-q',
+      '-w',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '--csv',
+      '-P',
+      'pager=off',
+      '-h',
+      conn.host,
+      '-p',
+      String(conn.port),
+      '-U',
+      conn.username,
+      '-d',
+      database,
+      '-f',
+      sqlFile,
+    ],
+    env: {
+      ...process.env,
+      PGPASSWORD: conn.password,
+      PGCONNECT_TIMEOUT: '5',
+      PGCLIENTENCODING: 'UTF8',
+      PGOPTIONS: '-c default_transaction_read_only=on -c statement_timeout=60s',
+    },
+  }
+}
+
+// QueryJdbc.java takes the login from FREYA_DB_* variables, never arguments,
+// and sets the same read-only session and timeout as PGOPTIONS above.
+function jdbcCommand(runner, conn, database, sqlFile) {
+  return {
+    bin: runner.java,
+    args: [
+      // English driver messages; a Chinese Windows locale garbles them.
+      '-Duser.language=en',
+      '-Duser.country=US',
+      '-cp',
+      runner.jar,
+      path.join(SCRIPT_DIR, 'QueryJdbc.java'),
+      sqlFile,
+    ],
+    env: {
+      ...process.env,
+      FREYA_DB_HOST: conn.host,
+      FREYA_DB_PORT: String(conn.port),
+      FREYA_DB_NAME: database,
+      FREYA_DB_USER: conn.username,
+      FREYA_DB_PASSWORD: conn.password,
+    },
+  }
+}
+
 function redact(text, secret) {
   if (!secret || !text) return text
   return text.split(secret).join('***')
@@ -588,7 +722,8 @@ function usage() {
 
 Reads .freya/<connection>.credentials in the user home directory, one file per
 connection. --env picks the file whose envs key lists that environment; --conn
-names the file. Queries require psql. Nothing here starts a tunnel.`
+names the file. Queries use psql, or Java + JDBC when psql is not installed.
+Nothing here starts a tunnel.`
 }
 
 // One row per connection file. Never prints a username or a password.
@@ -770,12 +905,15 @@ async function main() {
         tunnelHelp(connection, conn.port),
     )
   }
-  const psql = findPsql()
-  if (!psql) {
+  const runner = findRunner()
+  if (runner.kind === 'none') {
     throw new Error(
-      'psql was not found on PATH.\n' +
-        'macOS: brew install libpq, and put its bin directory on PATH (Apple Silicon: /opt/homebrew/opt/libpq/bin).\n' +
-        'Windows: install the PostgreSQL client tools and add that bin directory to PATH.',
+      'psql was not found on PATH, and the JDBC fallback is not available ' +
+        `(java: ${runner.java ? 'found' : 'not found'}, PostgreSQL JDBC driver in ~/.m2: ${runner.jar ? 'found' : 'not found'}).\n` +
+        'Either install psql 12+ (macOS: brew install libpq, and put its bin directory on PATH;\n' +
+        'Windows: install the PostgreSQL client tools and add that bin directory to PATH),\n' +
+        'or install Java 11+ and have org.postgresql:postgresql in the local Maven repository\n' +
+        '(or point FREYA_PG_JDBC_JAR at the driver jar).',
     )
   }
 
@@ -784,44 +922,20 @@ async function main() {
   const started = Date.now()
   try {
     fs.writeFileSync(sqlFile, sql, { encoding: 'utf8', mode: 0o600 })
-    console.log(`Connecting ${conn.host}:${conn.port}/${database} (connection ${connection.name})`)
-    const result = await runPsql(
-      psql,
-      [
-        '-X',
-        '-q',
-        '-w',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '--csv',
-        '-P',
-        'pager=off',
-        '-h',
-        conn.host,
-        '-p',
-        String(conn.port),
-        '-U',
-        conn.username,
-        '-d',
-        database,
-        '-f',
-        sqlFile,
-      ],
-      {
-        ...process.env,
-        PGPASSWORD: conn.password,
-        PGCONNECT_TIMEOUT: '5',
-        PGCLIENTENCODING: 'UTF8',
-        PGOPTIONS: '-c default_transaction_read_only=on -c statement_timeout=60s',
-      },
-    )
+    const tool = runner.kind === 'psql' ? 'psql' : 'JDBC'
+    console.log(`Connecting ${conn.host}:${conn.port}/${database} (connection ${connection.name}, via ${tool})`)
+    const command =
+      runner.kind === 'psql'
+        ? psqlCommand(runner.psql, conn, database, sqlFile)
+        : jdbcCommand(runner, conn, database, sqlFile)
+    const result = await runPsql(command.bin, command.args, command.env)
     if (result.code !== 0) {
       const detail = redact((result.stderr || result.stdout).trim(), conn.password) || `exit ${result.code}`
-      throw new Error(`psql failed: ${detail}`)
+      throw new Error(`${tool} failed: ${detail}`)
     }
     const rows = parseCsv(result.stdout)
     if (rows.length === 0 || rows[0].length === 0) {
-      throw new Error('psql returned no header row.')
+      throw new Error(`${tool} returned no header row.`)
     }
     const header = rows[0].map((cell) => (cell === null ? '' : cell))
     const data = rows.slice(1).filter((row) => !(row.length === 1 && row[0] === null && header.length > 1))

@@ -21,6 +21,7 @@ import {
   NAME,
   TYPES,
   configDir,
+  connectionType,
   findJava,
   findJdbcDriver,
   findPsql,
@@ -235,7 +236,9 @@ function checkTunnelKeys(connection) {
 
 function checkAcrossConnections(connections, addresses) {
   const byEnv = new Map()
-  for (const connection of connections) {
+  // --env matches postgres connections only (see selectConnection), so a
+  // redis file listing the same env as a database file is not a conflict.
+  for (const connection of connections.filter((item) => connectionType(item) === 'postgres')) {
     for (const env of connection.declared.filter((item) => NAME.test(item))) {
       byEnv.set(env, [...(byEnv.get(env) || []), connection.name])
     }
